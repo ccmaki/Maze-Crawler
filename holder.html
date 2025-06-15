@@ -587,23 +587,25 @@
             return null;
         }
         
+        let ghostMoveTimer = 0;
+
         function moveGhosts() {
             if (!gameRunning || !playerMoved) return;
+    
+                ghostMoveTimer++;
+            if (ghostMoveTimer >= 30) {
+                ghostMoveTimer = 0;
 
-            ghostMoveCounter++;
-            if (ghostMoveCounter < ghostMoveDelay) return;
-            ghostMoveCounter = 0;
+                ghosts.forEach(ghost => {
+                    const path = findPath(ghost.x, ghost.y, player.x, player.y);
 
-            ghosts.forEach(ghost => {
-                const path = findPath(ghost.x, ghost.y, player.x, player.y);
-                if (path && path.length > 1) {
-                    const nextStep = path[1]; 
-                    ghost.x = nextStep.x;
-                    ghost.y = nextStep.y;
-                    ghost.dx = nextStep.x - path[0].x;
-                    ghost.dy = nextStep.y - path[0].y;
-                }
-            });
+                    if (path && path.length > 1) {
+                        const nextStep = path[1];
+                        ghost.x = nextStep.x;
+                        ghost.y = nextStep.y;
+                    }
+                });
+            }
         }
         
         function checkCollisions() {
