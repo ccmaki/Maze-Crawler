@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Button Pacman Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        
+        #gameContainer {
+            position: relative;
+            border: 3px solid #00f;
+        }
+        
+        canvas {
+            background: #000;
+            display: block;
+        }
+        
+        #ui {
+            margin-top: 10px;
+            text-align: center;
+        }
+        
+        #instructions {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .button-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin: 0 5px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            text-align: center;
+            line-height: 16px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .collected {
+            background: #0f0;
+            border-color: #0f0;
+        }
+        
+        .red { background: #f00; }
+        .blue { background: #00f; }
+        .yellow { background: #ff0; color: #000; }
+        .green { background: #0f0; }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border: 2px solid #fff;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        Use WASD or Arrow Keys to move. Collect all colored buttons to unlock the exit gate!
+    </div>
+    
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="gameOver">
+            <h2 id="gameOverText">Game Over!</h2>
+            <button onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+    
+    <div id="ui">
+        <div>Buttons to collect:</div>
+        <div id="buttonIndicators">
+            <span class="button-indicator red">R</span>
+            <span class="button-indicator blue">B</span>
+            <span class="button-indicator yellow">Y</span>
+            <span class="button-indicator green">G</span>
+        </div>
+    </div>
+
+    <script>
+        let ghostMoveCounter = 0;
+        const ghostMoveDelay = 70;
+
+        let buttonAnimations = [];
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let gameRunning = true;
+        let gameWon = false;
+        
+        // Maze layout (1 = wall, 0 = empty, 2 = button, 3 = exit)
+        const maze = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,0,1],
+            [1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1],
+            [1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,1,1],
+            [0,0,0,1,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0],
+            [1,1,1,1,0,1,0,1,1,0,0,1,1,0,1,0,1,1,1,1],
+            [0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0],
+            [1,1,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,1],
+            [0,0,0,1,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0],
+            [1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+        
+        const CELL_SIZE = 40;
+        
+        // Player
+        const player = {
+            x: 1,
+            y: 1,
+            size: 15,
+            color: '#ff0',
+            direction: 'right'
+        };
+        
+        // Buttons to collect
+        const buttons = [
+            { x: 3, y: 3, color: '#f00', name: 'R', collected: false },
+            { x: 16, y: 3, color: '#00f', name: 'B', collected: false },
+            { x: 3, y: 13, color: '#ff0', name: 'Y', collected: false },
+            { x: 16, y: 13, color: '#0f0', name: 'G', collected: false }
+        ];
+        
+        // Ghosts
+        const ghosts = [
+            { x: 9, y: 7, color: '#f0f', dx: 1, dy: 0 },
+            { x: 10, y: 7, color: '#0ff', dx: -1, dy: 0 }
+        ];
+        
+        // Input handling
+        const keys = {};
+        let lastMoveTime = 0;
+        const MOVE_DELAY = 150; // milliseconds between moves
+        
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        function isWall(x, y) {
+            if (x < 0 || x >= maze[0].length || y < 0 || y >= maze.length) return true;
+            return maze[y][x] === 1;
+        }
+        
+        function isExit(x, y) {
+            if (x < 0 || x >= maze[0].length || y < 0 || y >= maze.length) return false;
+            return maze[y][x] === 3;
+        }
+        
+        function movePlayer() {
+            if (!gameRunning) return;
+            
+            const currentTime = Date.now();
+            if (currentTime - lastMoveTime < MOVE_DELAY) return;
+            
+            let newX = player.x;
+            let newY = player.y;
+            let moved = false;
+            
+            if (keys['w'] || keys['arrowup']) {
+                newY--;
+                player.direction = 'up';
+                moved = true;
+            } else if (keys['s'] || keys['arrowdown']) {
+                newY++;
+                player.direction = 'down';
+                moved = true;
+            } else if (keys['a'] || keys['arrowleft']) {
+                newX--;
+                player.direction = 'left';
+                moved = true;
+            } else if (keys['d'] || keys['arrowright']) {
+                newX++;
+                player.direction = 'right';
+                moved = true;
+            }
+            
+            if (moved && !isWall(newX, newY)) {
+                player.x = newX;
+                player.y = newY;
+                lastMoveTime = currentTime;
+                
+                // Check if reached exit with all buttons collected
+                if (isExit(newX, newY) && buttons.every(b => b.collected)) {
+                    gameWon = true;
+                    gameRunning = false;
+                    showGameOver();
+                }
+            }
+        }
+        
+        function heuristic(a, b) {
+            // Manhattan distance
+            return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+        }
+        
+        function getNeighbors(node) {
+            const neighbors = [];
+            const directions = [
+                {x: 0, y: -1}, {x: 1, y: 0}, {x: 0, y: 1}, {x: -1, y: 0}
+            ];
+            
+            for (let dir of directions) {
+                const newX = node.x + dir.x;
+                const newY = node.y + dir.y;
+                
+                if (!isWall(newX, newY)) {
+                    neighbors.push({x: newX, y: newY});
+                }
+            }
+            return neighbors;
+        }
+        
+        function findPath(startX, startY, targetX, targetY) {
+            const start = {x: startX, y: startY};
+            const target = {x: targetX, y: targetY};
+            
+            const openSet = [start];
+            const closedSet = [];
+            const gScore = {};
+            const fScore = {};
+            const cameFrom = {};
+            
+            const key = (node) => `${node.x},${node.y}`;
+            
+            gScore[key(start)] = 0;
+            fScore[key(start)] = heuristic(start, target);
+            
+            while (openSet.length > 0) {
+                // Find node with lowest fScore
+                let current = openSet[0];
+                let currentIndex = 0;
+                for (let i = 1; i < openSet.length; i++) {
+                    if (fScore[key(openSet[i])] < fScore[key(current)]) {
+                        current = openSet[i];
+                        currentIndex = i;
+                    }
+                }
+                
+                // If we reached the target
+                if (current.x === target.x && current.y === target.y) {
+                    const path = [];
+                    let temp = current;
+                    while (temp) {
+                        path.unshift(temp);
+                        temp = cameFrom[key(temp)];
+                    }
+                    return path;
+                }
+                
+                // Move current from open to closed
+                openSet.splice(currentIndex, 1);
+                closedSet.push(current);
+                
+                // Check neighbors
+                const neighbors = getNeighbors(current);
+                for (let neighbor of neighbors) {
+                    const neighborKey = key(neighbor);
+                    
+                    // Skip if already evaluated
+                    if (closedSet.some(node => node.x === neighbor.x && node.y === neighbor.y)) {
+                        continue;
+                    }
+                    
+                    const tentativeGScore = gScore[key(current)] + 1;
+                    
+                    // If not in open set, add it
+                    if (!openSet.some(node => node.x === neighbor.x && node.y === neighbor.y)) {
+                        openSet.push(neighbor);
+                    } else if (tentativeGScore >= (gScore[neighborKey] || Infinity)) {
+                        continue; // Not a better path
+                    }
+                    
+                    // This is the best path so far
+                    cameFrom[neighborKey] = current;
+                    gScore[neighborKey] = tentativeGScore;
+                    fScore[neighborKey] = gScore[neighborKey] + heuristic(neighbor, target);
+                }
+            }
+            
+            return null; // No path found
+        }
+        function isOccupiedByGhost(x, y, excludeGhost = null) {
+            return ghosts.some(g => g !== excludeGhost && g.x === x && g.y === y);
+            }
+        
+        function moveGhosts() {
+            if (!gameRunning) return;
+
+            ghostMoveCounter++;
+            if (ghostMoveCounter < ghostMoveDelay) return;
+            ghostMoveCounter = 0; // reset counter  
+
+            ghosts.forEach(ghost => {
+                const path = findPath(ghost.x, ghost.y, player.x, player.y);
+                if (path && path.length > 1) {
+                    const nextStep = path[1]; 
+                    ghost.x = nextStep.x;
+                    ghost.y = nextStep.y;
+                    ghost.dx = nextStep.x - path[0].x;
+                    ghost.dy = nextStep.y - path[0].y;
+                    }
+                });
+
+        }
+
+        
+        function checkCollisions() {
+            // Check button collection
+            buttons.forEach(button => {
+                if (!button.collected && player.x === button.x && player.y === button.y) {
+                    button.collected = true;
+                    buttonAnimations.push({ x: button.x, y: button.y, radius: 24, alpha: 1 });
+                    updateButtonIndicators();
+                }
+            });
+            
+            // Check ghost collision
+            ghosts.forEach(ghost => {
+                if (player.x === ghost.x && player.y === ghost.y) {
+                    gameRunning = false;
+                    gameWon = false;
+                    showGameOver();
+                }
+            });
+        }
+        
+        function updateButtonIndicators() {
+            const indicators = document.querySelectorAll('.button-indicator');
+            buttons.forEach((button, index) => {
+                if (button.collected) {
+                    indicators[index].classList.add('collected');
+                }
+            });
+        }
+        
+        function drawMaze() {
+            ctx.fillStyle = '#00f';
+            for (let y = 0; y < maze.length; y++) {
+                for (let x = 0; x < maze[y].length; x++) {
+                    if (maze[y][x] === 1) {
+                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    } else if (maze[y][x] === 3) {
+                        const allButtonsCollected = buttons.every(b => b.collected);
+                        const gateX = x * CELL_SIZE + 2;
+                        const gateY = y * CELL_SIZE + 2;
+                        const gateSize = CELL_SIZE - 4;
+
+                        // Gate glow effect
+                        if (allButtonsCollected) {
+                            ctx.save();
+                            ctx.shadowColor = '#0f0';
+                            ctx.shadowBlur = 20;
+                            ctx.fillStyle = '#0f0';
+                            ctx.fillRect(gateX, gateY, gateSize, gateSize);
+                            ctx.restore();
+                        } else {
+                            ctx.fillStyle = '#f00';
+                            ctx.fillRect(gateX, gateY, gateSize, gateSize);
+                            }
+
+                        // Draw EXIT text
+                        ctx.fillStyle = allButtonsCollected ? '#fff' : '#000';
+                        ctx.font = '14px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('EXIT', x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2 + 5);
+                        }       
+
+                }
+            }
+        }
+        
+        function drawPlayer() {
+            const centerX = player.x * CELL_SIZE + CELL_SIZE / 2;
+            const centerY = player.y * CELL_SIZE + CELL_SIZE / 2;
+            
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            
+            // Draw pacman shape based on direction
+            let startAngle = 0;
+            let endAngle = Math.PI * 2;
+            
+            switch(player.direction) {
+                case 'right':
+                    startAngle = 0.2 * Math.PI;
+                    endAngle = 1.8 * Math.PI;
+                    break;
+                case 'left':
+                    startAngle = 1.2 * Math.PI;
+                    endAngle = 0.8 * Math.PI;
+                    break;
+                case 'up':
+                    startAngle = 1.7 * Math.PI;
+                    endAngle = 1.3 * Math.PI;
+                    break;
+                case 'down':
+                    startAngle = 0.7 * Math.PI;
+                    endAngle = 0.3 * Math.PI;
+                    break;
+            }
+            
+            ctx.arc(centerX, centerY, player.size, startAngle, endAngle);
+            ctx.lineTo(centerX, centerY);
+            ctx.fill();
+        }
+        
+        function drawButtons() {
+            buttons.forEach(button => {
+                if (!button.collected) {
+                    const centerX = button.x * CELL_SIZE + CELL_SIZE / 2;
+                    const centerY = button.y * CELL_SIZE + CELL_SIZE / 2;
+                    
+                    ctx.fillStyle = button.color;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Draw button label
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(button.name, centerX, centerY + 5);
+                }
+            });
+        }
+
+        function drawButtonAnimations() {
+            buttonAnimations = buttonAnimations.filter(anim => {
+            ctx.save();
+            ctx.globalAlpha = anim.alpha;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(anim.x * CELL_SIZE + CELL_SIZE / 2, anim.y * CELL_SIZE + CELL_SIZE / 2, anim.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            anim.radius += 0.5;
+            anim.alpha -= 0.05;
+
+            return anim.alpha > 0;
+        });
+}
+        
+        function drawGhosts() {
+            ghosts.forEach(ghost => {
+                const centerX = ghost.x * CELL_SIZE + CELL_SIZE / 2;
+                const centerY = ghost.y * CELL_SIZE + CELL_SIZE / 2;
+                
+                ctx.fillStyle = ghost.color;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY - 5, 12, Math.PI, 0);
+                ctx.rect(centerX - 12, centerY - 5, 24, 15);
+                // Draw wavy bottom
+                ctx.moveTo(centerX - 12, centerY + 10);
+                ctx.lineTo(centerX - 8, centerY + 5);
+                ctx.lineTo(centerX - 4, centerY + 10);
+                ctx.lineTo(centerX, centerY + 5);
+                ctx.lineTo(centerX + 4, centerY + 10);
+                ctx.lineTo(centerX + 8, centerY + 5);
+                ctx.lineTo(centerX + 12, centerY + 10);
+                ctx.lineTo(centerX + 12, centerY - 5);
+                ctx.fill();
+                
+                // Draw eyes
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(centerX - 5, centerY - 3, 3, 0, Math.PI * 2);
+                ctx.arc(centerX + 5, centerY - 3, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(centerX - 5, centerY - 3, 1.5, 0, Math.PI * 2);
+                ctx.arc(centerX + 5, centerY - 3, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        function showGameOver() {
+            const gameOverDiv = document.getElementById('gameOver');
+            const gameOverText = document.getElementById('gameOverText');
+            
+            if (gameWon) {
+                gameOverText.textContent = 'You Win!';
+                gameOverDiv.style.color = '#0f0';
+            } else {
+                gameOverText.textContent = 'Game Over! Ghost caught you!';
+                gameOverDiv.style.color = '#f00';
+            }
+            
+            gameOverDiv.style.display = 'block';
+        }
+        
+        function restartGame() {
+            gameRunning = true;
+            gameWon = false;
+            
+            // Reset player
+            player.x = 1;
+            player.y = 1;
+            player.direction = 'right';
+            
+            // Reset buttons
+            buttons.forEach(button => button.collected = false);
+            
+            // Reset ghosts
+            ghosts[0].x = 9; ghosts[0].y = 7;
+            ghosts[1].x = 10; ghosts[1].y = 7;
+            ghosts[2].x = 9; ghosts[2].y = 11;
+            ghosts[3].x = 10; ghosts[3].y = 11;
+            
+            // Reset UI
+            document.getElementById('gameOver').style.display = 'none';
+            const indicators = document.querySelectorAll('.button-indicator');
+            indicators.forEach(indicator => indicator.classList.remove('collected'));
+        }
+        
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update game state
+            movePlayer();
+            moveGhosts();
+            checkCollisions();
+            
+            // Draw everything
+            drawMaze();
+            drawButtons();
+            drawPlayer();
+            drawGhosts();
+            
+            requestAnimationFrame(gameLoop);
+            drawButtonAnimations();
+
+        }
+        
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
