@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Button Pacman Game</title>
+    <title>OTLUM</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
         
@@ -320,7 +320,31 @@
     </style>
 </head>
 <body>
-    <h1 class="game-title">BUTTON PACMAN</h1>
+    <h1 class="game-title">OTLUM: MAZE CRAWLER</h1>
+    <div id="ui">
+        <div id="instructions">
+            <div>Navigate through the maze and collect all colored buttons to unlock the exit gate!</div>
+            <div>Avoid the ghosts - they're hunting you down using advanced AI pathfinding.</div>
+            <div class="controls-hint">
+                <span class="key-hint">W A S D</span>
+                <span class="key-hint">↑ ← ↓ →</span>
+            </div>
+        </div>
+        
+        <div class="status-section">
+            <div class="status-title">Collect All Buttons</div>
+            <div class="button-indicators-container" id="buttonIndicators">
+                <div class="button-indicator red">R</div>
+                <div class="button-indicator blue">B</div>
+                <div class="button-indicator yellow">Y</div>
+                <div class="button-indicator green">G</div>
+            </div>
+        </div>
+        <div class="status-section">
+                <div class="status-title">Lives</div>
+                <div id="livesContainer" style="font-size: 20px; color: #ff6b6b;">❤️❤️❤️</div>
+        </div>
+    </div>
     
     <div id="gameContainer">
         <div id="startOverlay" style="
@@ -349,33 +373,13 @@
         </div>
     </div>
     
-    <div id="ui">
-        <div id="instructions">
-            <div>Navigate through the maze and collect all colored buttons to unlock the exit gate!</div>
-            <div>Avoid the ghosts - they're hunting you down using advanced AI pathfinding.</div>
-            <div class="controls-hint">
-                <span class="key-hint">W A S D</span>
-                <span class="key-hint">↑ ← ↓ →</span>
-            </div>
-        </div>
-        
-        <div class="status-section">
-            <div class="status-title">Collect All Buttons</div>
-            <div class="button-indicators-container" id="buttonIndicators">
-                <div class="button-indicator red">R</div>
-                <div class="button-indicator blue">B</div>
-                <div class="button-indicator yellow">Y</div>
-                <div class="button-indicator green">G</div>
-            </div>
-        </div>
-    </div>
-
     <script>
+        let lives = 3;
+        let livesholder = lives;
         let playerMoved = false;
         let ghostMoveCounter = 0;
         const ghostMoveDelay = 50;
         let buttonAnimations = [];
-        let gameStartTime = Date.now();
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -626,12 +630,27 @@ const maze = [
             });
             
             ghosts.forEach(ghost => {
-                if (player.x === ghost.x && player.y === ghost.y) {
+            if (player.x === ghost.x && player.y === ghost.y) {
+                lives--;
+
+                if (lives <= 0) {
                     gameRunning = false;
                     gameWon = false;
                     showGameOver();
+                } else {
+                    livesholder = lives;
+                    restartGame();
+                    lives = livesholder;
+                    updateLivesDisplay();
                 }
-            });
+            }
+        });
+
+        }
+
+        function updateLivesDisplay() {
+            const container = document.getElementById('livesContainer');
+            container.innerHTML = '❤️'.repeat(lives);
         }
         
         function updateButtonIndicators() {
@@ -879,7 +898,6 @@ const maze = [
             const gameOverText = document.getElementById('gameOverText');
             const finalScore = document.getElementById('finalScore');
             
-            const gameTime = Math.floor((Date.now() - gameStartTime) / 1000);
             const buttonsCollected = buttons.filter(b => b.collected).length;
             
             if (gameWon) {
@@ -907,7 +925,8 @@ const maze = [
             playerMoved = false;
             gameRunning = true;
             gameWon = false;
-            gameStartTime = Date.now();
+            lives = 3;
+            updateLivesDisplay();
             
             // Reset player
             player.x = 1;
@@ -929,6 +948,9 @@ const maze = [
             document.getElementById('gameOver').style.display = 'none';
             const indicators = document.querySelectorAll('.button-indicator');
             indicators.forEach(indicator => indicator.classList.remove('collected'));
+
+            playerMoved = false;
+            document.getElementById('startOverlay').style.display = 'flex';
         }
         
         function gameLoop() {
